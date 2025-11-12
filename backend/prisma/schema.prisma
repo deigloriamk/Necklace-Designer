@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  username        String   @unique @db.VarChar(20)
+  email           String   @unique @db.VarChar(255)
+  passwordHash    String   @map("password_hash") @db.VarChar(255)
+  fullName        String?  @map("full_name") @db.VarChar(50)
+  bio             String?  @db.VarChar(160)
+  profilePicUrl   String?  @map("profile_pic_url") @db.VarChar(500)
+  isPrivate       Boolean  @default(false) @map("is_private")
+  isVerified      Boolean  @default(false) @map("is_verified")
+  emailVerified   Boolean  @default(false) @map("email_verified")
+  lastActive      DateTime @default(now()) @map("last_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  posts           Post[]
+  comments        Comment[]
+  likes           Like[]
+  savedPosts      Save[]
+  stories         Story[]
+  messagesSent    Message[] @relation("MessageSender")
+  messagesReceived Message[] @relation("MessageReceiver")
+  notifications   Notification[]
+  following       Follow[] @relation("FollowFollowing")
+  followers       Follow[] @relation("FollowFollower")
+  blocksInitiated Block[] @relation("BlockInitiator")
+  blocksReceived  Block[] @relation("BlockTarget")
+  reportsInitiated Report[] @relation("ReportInitiator")
+
+  // Computed fields (virtual)
+  @@map("users")
+}
+
+model Post {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  mediaUrl     String    @map("media_url") @db.VarChar(500)
+  mediaType    MediaType @map("media_type")
+  caption      String?   @db.VarChar(2200)
+  location     String?   @db.VarChar(50)
+  likeCount    Int       @default(0) @map("like_count")
+  commentCount Int       @default(0) @map("comment_count")
+  isArchived   Boolean   @default(false) @map("is_archived")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments   Comment[]
+  likes      Like[]
+  saves      Save[]
+  hashtags   PostHashtag[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id             String?   @id @default(uuid())
+  postId         String    @map("post_id")
+  userId         String    @map("user_id")
+  parentCommentId String?  @map("parent_comment_id")
+  content        String    @db.VarChar(500)
+  isDeleted      Boolean   @default(false) @map("is_deleted")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentComment Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id])
+  replies       Comment[] @relation("CommentReplies")
+
+  @@map("comments")
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  postId    String   @map("post_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("likes")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String   @map("follower_id")
+  followingId String   @map("following_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  follower  User @relation("FollowFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("FollowFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Hashtag {
+  id        String   @id @default(uuid())
+  name      String   @unique @db.VarChar(100)
+  postCount Int      @default(0) @map("post_count")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  posts PostHashtag[]
+
+  @@map("hashtags")
+}
+
+model PostHashtag {
+  postId     String   @map("post_id")
+  hashtagId  String   @map("hashtag_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, hashtagId])
+  @@map("post_hashtags")
+}
+
+model Story {
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  mediaUrl  String     @map("media_url") @db.VarChar(500)
+  mediaType MediaType  @map("media_type")
+  expiresAt DateTime   @map("expires_at")
+  isActive  Boolean    @default(true) @map("is_active")
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("stories")
+}
+
+model Message {
+  id          String       @id @default(uuid())
+  senderId    String       @map("sender_id")
+  receiverId  String       @map("receiver_id")
+  content     String       @db.VarChar(1000)
+  messageType MessageType  @map("message_type")
+  mediaUrl    String?      @map("media_url") @db.VarChar(500)
+  isDeleted   Boolean      @default(false) @map("is_deleted")
+  readAt      DateTime?    @map("read_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  sender   User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Notification {
+  id           String           @id @default(uuid())
+  userId       String           @map("user_id")
+  fromUserId   String?          @map("from_user_id")
+  type         NotificationType
+  referenceId  String?          @map("reference_id")
+  message      String           @db.VarChar(200)
+  isRead       Boolean          @default(false) @map("is_read")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromUser User? @relation(fields: [fromUserId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+model Save {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  postId    String   @map("post_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("saves")
+}
+
+model Block {
+  id          String   @id @default(uuid())
+  blockerId   String   @map("blocker_id")
+  blockedId   String   @map("blocked_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  blocker User @relation("BlockInitiator", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockTarget", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
+
+model Report {
+  id          String       @id @default(uuid())
+  reporterId  String       @map("reporter_id")
+  reportedId  String       @map("reported_id")
+  postId      String?      @map("post_id")
+  commentId   String?      @map("comment_id")
+  reason      ReportReason
+  description String?      @db.VarChar(500)
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  reporter User  @relation("ReportInitiator", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+// Enums
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  MENTION
+  MESSAGE
+  STORY_VIEW
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  HATE_SPEECH
+  VIOLENCE
+  COPYRIGHT
+  PRIVACY
+  FAKE_ACCOUNT
+  INAPPROPRIATE_CONTENT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
